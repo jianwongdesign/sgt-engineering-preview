@@ -379,3 +379,21 @@ document.querySelectorAll('details.faq').forEach(details => {
   window.visualViewport?.addEventListener('resize',schedule,{passive:true});
   place();
 })();
+
+// A role linked from Home opens directly, including when the hash changes in-page.
+(() => {
+  const revealRole = () => {
+    let id;
+    try { id = decodeURIComponent(location.hash.slice(1)); } catch { return; }
+    const role = id ? document.getElementById(id) : null;
+    if (role?.matches('details.career-role')) {
+      document.querySelectorAll('details.career-role').forEach(item => { item.open = item === role; });
+      document.fonts.ready.then(() => {
+        role.scrollIntoView({block:'start',behavior:'instant'});
+        role.querySelector('summary').focus({preventScroll:true});
+      });
+    }
+  };
+  addEventListener('hashchange',revealRole);
+  revealRole();
+})();
