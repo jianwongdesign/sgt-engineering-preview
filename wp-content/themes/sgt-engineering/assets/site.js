@@ -351,7 +351,7 @@ document.querySelectorAll('details.faq').forEach(details => {
   const chat = document.querySelector('.whatsapp-launcher');
   if (!chat) return;
   const cookie = document.querySelector('.cookie-banner');
-  const footerBottom = document.querySelector('.footer-bottom');
+  const footerBottom = document.querySelector('.site-footer');
   let footerVisible = false, queued = false;
   const place = () => {
     queued = false;
@@ -363,7 +363,7 @@ document.querySelectorAll('details.faq').forEach(details => {
     const bottom = overlaps ? innerHeight - rect.top + 12 : base;
     const menuOpen = mobile && toggle?.getAttribute('aria-expanded') === 'true';
     const insufficientSpace = overlaps && innerHeight - bottom < 160;
-    chat.hidden = (menuOpen || footerVisible || insufficientSpace) && document.activeElement !== chat;
+    chat.hidden = (menuOpen || footerVisible || insufficientSpace) && !chat.contains(document.activeElement);
     chat.style.setProperty('--whatsapp-bottom', `${bottom}px`);
     chat.classList.add('is-positioned');
   };
@@ -371,7 +371,10 @@ document.querySelectorAll('details.faq').forEach(details => {
   if(cookie) {new ResizeObserver(schedule).observe(cookie);new MutationObserver(schedule).observe(cookie,{attributes:true,attributeFilter:['hidden']});}
   if(toggle) new MutationObserver(schedule).observe(toggle,{attributes:true,attributeFilter:['aria-expanded']});
   if(footerBottom) new IntersectionObserver(entries=>{footerVisible=entries[0].isIntersecting;schedule();}).observe(footerBottom);
-  chat.addEventListener('blur',schedule);
+  chat.addEventListener('focusout',schedule);
+  chat.addEventListener('toggle',schedule);
+  document.addEventListener('click',event=>{if(!chat.contains(event.target))chat.open=false;});
+  document.addEventListener('keydown',event=>{if(event.key==='Escape' && chat.open){chat.open=false;chat.querySelector('summary').focus();}});
   addEventListener('resize',schedule,{passive:true});
   window.visualViewport?.addEventListener('resize',schedule,{passive:true});
   place();
