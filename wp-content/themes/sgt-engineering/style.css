@@ -2,7 +2,7 @@
 Theme Name: SGT Engineering
 Author: SGT x Adcendes
 Description: An architectural, project-led WordPress theme for SGT Engineering Consultancy.
-Version: 0.6.1
+Version: 0.6.2
 Requires at least: 6.6
 Requires PHP: 8.1
 Text Domain: sgt-engineering
@@ -112,14 +112,14 @@ figure {margin:0}
 .service-list {border-top:1px solid var(--line)}
 .service-list>a {display:grid;grid-template-columns:128px 1fr .95fr 36px;align-items:center;gap:32px;padding:23px 0;border-bottom:1px solid var(--line);transition:background-color .25s}
 .service-image {height:95px;overflow:hidden}
-.service-image img {width:100%;height:100%;object-fit:cover;filter:saturate(.7);transition:filter .4s,transform .4s}
+.service-image img {width:100%;height:100%;object-fit:cover;transition:transform 400ms var(--ease-out)}
 .service-list h3 {font-size:27px;max-width:19ch}
 .service-list p {font-size:13px;line-height:1.7;color:var(--muted);margin:0;max-width:45ch}
 .service-arrow {width:36px;height:36px;display:grid;place-items:center;border-radius:50%;border:1px solid var(--line);transition:background-color .25s,color .25s}
 .service-arrow svg {width:17px}
 .service-list>a:hover .service-arrow {background:var(--navy);color:#fff;border-color:var(--navy)}
 .service-list>a:hover h3 {color:var(--blue)}
-.service-list>a:hover img {filter:saturate(1);transform:scale(1.06)}
+.service-list>a:hover img {transform:scale(1.04)}
 .faq-section {background:var(--mist)}
 .home-faq {display:grid;grid-template-columns:1fr 1.3fr;gap:90px}
 .home-faq h2 {font-size:43px;margin-bottom:20px}
@@ -382,7 +382,9 @@ html {scroll-behavior:auto}
 .timeline-controls button:hover:not(:disabled) {background:var(--navy);color:white;border-color:var(--navy)}
 .timeline-controls button:disabled {opacity:.35;cursor:default}
 .timeline-controls [data-timeline-prev] svg {transform:rotate(180deg)}
-.timeline-track {position:relative;display:grid;grid-auto-flow:column;grid-auto-columns:calc((100% - 48px)/3);gap:24px;list-style:none;padding:4px 0 15px;margin:0;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;scrollbar-width:thin;scrollbar-color:var(--blue) var(--mist)}
+.timeline-track {position:relative;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;scrollbar-width:thin;scrollbar-color:var(--blue) var(--mist);overflow-anchor:none}
+.timeline-belt {position:relative;display:grid;grid-auto-flow:column;grid-auto-columns:calc((100% - 48px)/3);gap:24px;list-style:none;padding:4px 0 15px;margin:0}
+.timeline-track.has-marquee .timeline-belt {will-change:transform}
 .timeline-record {scroll-snap-align:start;min-width:0;border-top:1px solid var(--line);position:relative;padding-top:16px}
 .timeline-record:before {content:'';position:absolute;left:0;top:-4px;width:7px;height:7px;border-radius:50%;background:var(--blue)}
 .timeline-year {font-size:26px;font-weight:600;letter-spacing:-.04em;line-height:1.2}
@@ -405,12 +407,12 @@ html {scroll-behavior:auto}
 .cookie-actions button {font-size:12px;font-weight:600;min-height:44px;padding:10px 16px;background:white;border:1px solid var(--navy);color:var(--navy)}
 .cookie-actions button:last-child {background:var(--navy);color:white}
 .cookie-actions button:hover {background:#e6ebef;color:var(--navy)}
-@media(max-width:1050px) {.timeline-track {grid-auto-columns:calc((100% - 24px)/2)}}
+@media(max-width:1050px) {.timeline-belt {grid-auto-columns:calc((100% - 24px)/2)}}
 @media(max-width:760px) {
 .timeline-toolbar {gap:12px;align-items:flex-start}
 .timeline-years {gap:0}
 .timeline-years button {padding:10px;font-size:12px}
-.timeline-track {grid-auto-columns:calc((100% - 20px)/2);gap:20px}
+.timeline-belt {grid-auto-columns:calc((100% - 20px)/2);gap:20px}
 .timeline-record-body {padding:16px;min-height:245px}
 .timeline-record h3 {font-size:19px}
 .cookie-banner {width:calc(100% - 28px);bottom:14px;padding:20px;gap:18px;display:block}
@@ -421,7 +423,7 @@ html {scroll-behavior:auto}
 .timeline-toolbar {flex-wrap:wrap;margin-bottom:20px}
 .timeline-controls {margin-left:auto}
 .timeline-years {flex:1;min-width:200px}
-.timeline-track {grid-auto-columns:91%;gap:16px}
+.timeline-belt {grid-auto-columns:91%;gap:16px}
 .timeline-record-body {min-height:220px}
 .timeline-caption {font-size:10px;gap:16px}
 .timeline-caption>span:first-child {max-width:23ch}
@@ -429,7 +431,8 @@ html {scroll-behavior:auto}
 }
 @media print {
 .cookie-banner,.timeline-controls,.timeline-years {display:none!important}
-.timeline-track {display:grid;grid-template-columns:repeat(2,1fr);grid-auto-flow:row;overflow:visible}
+.timeline-track {overflow:visible}
+.timeline-belt {display:grid;grid-template-columns:repeat(2,1fr);grid-auto-flow:row;transform:none!important}
 .timeline-record {break-inside:avoid}
 }
 
@@ -442,7 +445,7 @@ html {scroll-behavior:auto}
 
 /* Quiet forward motion carries the tunnel's depth; the poster is always present. */
 .hero-photo img,.hero-video {object-position:58% 50%}
-.hero-video {position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0}
+.hero-video {position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 240ms ease}
 .hero-video.is-ready {opacity:1}
 .hero-footer {position:static;display:flex;justify-content:space-between;align-items:flex-end;gap:24px}
 .hero-caption {font-size:11px;line-height:1.7;border-top:1px solid rgba(255,255,255,.5);padding-top:12px}
@@ -477,7 +480,7 @@ html {scroll-behavior:auto}
 }
 
 
-/* A shared interaction rhythm; the tunnel remains the only continuous motion. */
+/* A shared interaction rhythm; continuous loops pause outside the viewport. */
 .primary-nav>a,.text-link,.discipline-label,.filter,.timeline-years button,.timeline-controls button,.faq summary,.cookie-actions button {transition:color var(--motion-fast) ease,background-color var(--motion-fast) ease,border-color var(--motion-fast) ease}
 .primary-nav>a:not(.nav-contact) {position:relative}
 .primary-nav>a:not(.nav-contact)::after {content:'';position:absolute;left:0;right:0;bottom:5px;height:2px;background:var(--blue);transform:scaleX(0);transform-origin:left;transition:transform var(--motion-ui) var(--ease-out)}
@@ -501,12 +504,6 @@ html {scroll-behavior:auto}
 body.admin-bar .site-header {top:32px}
 @media(max-width:782px) {body.admin-bar .site-header {top:46px}}
 @media(max-width:600px) {body.admin-bar .site-header {top:0}}
-@media(prefers-reduced-motion:no-preference) {
-  @view-transition {navigation:auto}
-  .site-header {view-transition-name:site-header}
-  ::view-transition-old(root),::view-transition-new(root) {animation-duration:180ms;animation-timing-function:ease}
-  ::view-transition-old(site-header),::view-transition-new(site-header) {animation:none}
-}
 @media(prefers-reduced-motion:reduce) {
   .project-card a:is(:hover,:focus-visible) .project-photo>img,.service-list>a:hover .service-image img {transform:none}
   ::view-transition-group(*),::view-transition-old(*),::view-transition-new(*) {animation:none!important}
@@ -540,7 +537,7 @@ body.admin-bar .site-header {top:32px}
 .client-list li {width:164px;height:104px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .client-list img {width:auto;height:auto;max-width:156px;max-height:76px;object-fit:contain}
 .client-section.is-enhanced .client-viewport {overflow:hidden}
-.client-section.is-enhanced .client-belt {animation:client-scroll var(--client-duration,110s) linear infinite;animation-play-state:paused}
+.client-section.is-enhanced .client-belt {will-change:transform;animation:client-scroll var(--client-duration,110s) linear infinite;animation-play-state:paused}
 .client-section.is-running .client-belt {animation-play-state:running}
 @keyframes client-scroll {to {transform:translateX(-50%)}}
 @media(max-width:760px) {
@@ -554,7 +551,7 @@ body.admin-bar .site-header {top:32px}
 }
 @media(prefers-reduced-motion:reduce) {
  .client-section.is-enhanced .client-viewport {overflow-x:auto}
- .client-section.is-enhanced .client-belt {animation:none;transform:none}
+ .client-section.is-enhanced .client-belt {will-change:transform;animation:none;transform:none}
  .client-list[aria-hidden=true] {display:none}
 }
 @media print {

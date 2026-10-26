@@ -50,24 +50,36 @@ function filterProjects(sector) {
   filters.forEach(filter => { const active = filter.dataset.filter === sector; filter.classList.toggle('active', active); filter.setAttribute('aria-pressed', String(active)); });
   if (count) count.textContent = `${visible} ${visible === 1 ? 'project' : 'projects'} shown`;
 }
-let filterTransition;
+// Animate only the six cards, not a screenshot of the whole scrolling page.
+let filterAnimations = [];
 let requestedSector = 'all';
 filters.forEach(filter => filter.addEventListener('click', () => {
   if (filter.dataset.filter === requestedSector) return;
   requestedSector = filter.dataset.filter;
-  filterTransition?.skipTransition();
-  const update = () => filterProjects(requestedSector);
-  if (!motionPreference.matches && document.startViewTransition) {
-    const grid = document.querySelector('.project-grid');
-    grid?.setAttribute('aria-busy', 'true');
-    const transition = document.startViewTransition(update);
-    filterTransition = transition;
-    transition.ready.catch(() => {}); // Unsupported snapshots still apply the filter.
-    transition.finished.catch(() => {}).finally(() => {
-      if (filterTransition === transition) { grid?.removeAttribute('aria-busy'); filterTransition = null; }
+  const grid = document.querySelector('.project-grid');
+  const before = new Map([...projects].filter(p => !p.hidden).map(p => [p, p.getBoundingClientRect()]));
+  filterAnimations.forEach(animation => animation.cancel());
+  filterProjects(requestedSector);
+  filterAnimations = [];
+  if (!motionPreference.matches) {
+    const after = [...projects].filter(p => !p.hidden).map(p => [p, p.getBoundingClientRect()]);
+    filterAnimations = after.map(([project, rect]) => {
+      const old = before.get(project);
+      return project.animate([
+        {transform: old ? `translate(${old.left-rect.left}px,${old.top-rect.top}px)` : 'none', opacity:old ? 1 : 0},
+        {transform:'none',opacity:1}
+      ], {duration:240,easing:motionEase});
     });
-  } else update();
+    const current = filterAnimations;
+    grid?.setAttribute('aria-busy','true');
+    Promise.allSettled(current.map(a => a.finished)).then(() => {
+      if (filterAnimations === current) { grid?.removeAttribute('aria-busy'); filterAnimations = []; }
+    });
+  } else grid?.removeAttribute('aria-busy');
 }));
+motionPreference.addEventListener('change', () => {
+  if (motionPreference.matches) filterAnimations.forEach(animation => animation.finish());
+});
 if (filters.length) filterProjects('all');
 
 // Optional integrations must check this state before loading any tracking code.
@@ -106,127 +118,127 @@ if (filters.length) filterProjects('all');
   const timeline = document.querySelector('.project-timeline');
   if (!timeline) return;
   const track = timeline.querySelector('.timeline-track');
-  const records = [...track.querySelectorAll('.timeline-record')];
+  const belt = track.querySelector('.timeline-belt');
+  const records = [...belt.querySelectorAll('.timeline-record')];
   const previous = timeline.querySelector('[data-timeline-prev]');
   const next = timeline.querySelector('[data-timeline-next]');
   const years = [...timeline.querySelectorAll('[data-timeline-year]')];
   const position = timeline.querySelector('.timeline-position');
   const motion = timeline.querySelector('[data-timeline-motion]');
-  // One visual duplicate makes the wrap seamless; assistive technology reads 24 originals.
-  const copies = records.map(record => {
+  records.forEach(record => {
     const copy = record.cloneNode(true);
     copy.dataset.timelineCopy = '';
-    copy.setAttribute('aria-hidden', 'true');
-    copy.inert = true;
-    track.append(copy);
-    return copy;
+    copy.setAttribute('aria-hidden','true'); copy.inert = true;
+    belt.append(copy);
   });
-  const allRecords = [...records, ...copies];
   track.classList.add('has-marquee');
-  let frame = 0, lastTime = 0, lastUpdate = 0, offset = 0;
+  let animation, statusTimer, resumeTimer, scrollTimer;
+  let stride = 1, recordWidth = 1, viewportWidth = 1, loopWidth = 1;
+  let remainder = 0, destination = null;
   let inView = false, hovered = timeline.matches(':hover'), touching = false;
-  let wanted = !motionPreference.matches, holdUntil = 0, resumeTimer;
-  const loopWidth = () => copies[0].offsetLeft - records[0].offsetLeft;
-  const hold = () => {
-    holdUntil = performance.now() + 1800;
-    clearTimeout(resumeTimer);
-    resumeTimer = setTimeout(syncMotion, 1850);
-    syncMotion();
-  };
-  const behavior = () => matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth';
-  const step = () => records.length > 1 ? records[1].offsetLeft - records[0].offsetLeft : track.clientWidth;
-  let destination = null;
-  const go = index => {
-    hold();
-    destination = Math.max(0, Math.min(index, records.length - 1));
-    track.scrollTo({left:records[destination].offsetLeft - records[0].offsetLeft, behavior:behavior()});
-  };
-  const current = () => destination ?? Math.round(track.scrollLeft / step());
-  previous.addEventListener('click', () => go(current() - 1));
-  next.addEventListener('click', () => go(current() + 1));
-  years.forEach(button => button.addEventListener('click', () => go(records.findIndex(r => r.dataset.startYear === button.dataset.timelineYear))));
-  track.addEventListener('keydown', event => {
-    if (event.target !== track || !['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
-    event.preventDefault();
-    go(event.key === 'Home' ? 0 : event.key === 'End' ? records.length - 1 : current() + (event.key === 'ArrowRight' ? 1 : -1));
-  });
+  let wanted = !motionPreference.matches, holdUntil = 0;
+  const offset = () => animation ? (Number(animation.currentTime || 0) * .032) % loopWidth : track.scrollLeft + remainder;
   const update = () => {
-    previous.disabled = track.scrollLeft <= 2;
-    next.disabled = track.scrollLeft >= records.at(-1).offsetLeft - records[0].offsetLeft - 2;
-    const bounds = track.getBoundingClientRect();
-    const visible = allRecords.map((record,index) => ({record,index,bounds:record.getBoundingClientRect()})).filter(item => item.bounds.left < bounds.right - 20 && item.bounds.right > bounds.left + 20);
-    if (!visible.length) return;
-    const first = visible[0].index % records.length + 1;
-    const last = visible.at(-1).index % records.length + 1;
-    const label = `${first <= last ? `${first}–${last}` : visible.map(item => item.index % records.length + 1).join(', ')} of ${records.length} projects`;
+    const left = offset();
+    previous.disabled = left <= 2;
+    next.disabled = left >= (records.length - 1) * stride - 2;
+    const first = Math.max(0, Math.floor((left + 20 - recordWidth) / stride) + 1);
+    const last = Math.max(first, Math.ceil((left + viewportWidth - 20) / stride) - 1);
+    const visible = Array.from({length:last-first+1},(_,i)=>(first+i)%records.length+1);
+    const label = `${visible[0] <= visible.at(-1) ? `${visible[0]}–${visible.at(-1)}` : visible.join(', ')} of ${records.length} projects`;
     if (position.textContent !== label) position.textContent = label;
-    years.forEach(button => { const active = button.dataset.timelineYear === visible[0].record.dataset.startYear; button.setAttribute('aria-pressed', String(active)); });
+    years.forEach(button => {
+      const value = String(button.dataset.timelineYear === records[first % records.length].dataset.startYear);
+      if (button.getAttribute('aria-pressed') !== value) button.setAttribute('aria-pressed', value);
+    });
   };
-  const tick = time => {
-    const elapsed = lastTime ? Math.min(time - lastTime, 64) : 0;
-    lastTime = time;
-    offset = (offset + elapsed * .032) % loopWidth();
-    track.scrollLeft = offset;
-    if (time - lastUpdate > 250) { update(); lastUpdate = time; }
-    frame = requestAnimationFrame(tick);
+  // Transfer the visual offset to native scrolling only when interaction pauses autoplay.
+  // Retaining the fractional remainder prevents a half-pixel jump at pause/resume.
+  const stop = () => {
+    if (!animation) return;
+    const left = offset();
+    animation.cancel(); animation = null;
+    belt.style.transform = '';
+    track.scrollLeft = left;
+    remainder = left - track.scrollLeft;
+    belt.style.transform = `translate3d(${-remainder}px,0,0)`;
+    clearInterval(statusTimer);
   };
   function syncMotion() {
     const focused = timeline.contains(document.activeElement) && document.activeElement !== motion;
     const running = wanted && !motionPreference.matches && inView && !hovered && !focused && !touching && !document.hidden && performance.now() >= holdUntil;
     motion.hidden = motionPreference.matches;
-    motion.setAttribute('aria-label', wanted ? 'Pause automatic project scrolling' : 'Play automatic project scrolling');
+    motion.setAttribute('aria-label',wanted ? 'Pause automatic project scrolling' : 'Play automatic project scrolling');
     motion.querySelector('span').textContent = wanted ? 'Pause' : 'Play';
-    motion.classList.toggle('is-paused', !wanted);
-    position.setAttribute('aria-live', running ? 'off' : 'polite');
-    if (running && !frame) { offset = track.scrollLeft % loopWidth(); lastTime = 0; frame = requestAnimationFrame(tick); }
-    if (!running && frame) { cancelAnimationFrame(frame); frame = 0; lastTime = 0; update(); }
+    motion.classList.toggle('is-paused',!wanted);
+    position.setAttribute('aria-live',running ? 'off' : 'polite');
+    if (running && !animation && loopWidth > 1) {
+      const left = offset() % loopWidth;
+      track.scrollLeft = 0; remainder = 0; belt.style.transform = '';
+      animation = belt.animate([{transform:'translate3d(0,0,0)'},{transform:`translate3d(${-loopWidth}px,0,0)`}],{duration:loopWidth/.032,iterations:Infinity,easing:'linear'});
+      animation.currentTime = left / .032;
+      statusTimer = setInterval(update,250);
+    } else if (!running) stop();
+    update();
   }
-  motion.addEventListener('click', () => { wanted = !wanted; syncMotion(); });
-  timeline.addEventListener('pointerenter', event => { if (event.pointerType === 'mouse') { hovered = true; syncMotion(); } });
-  timeline.addEventListener('pointerleave', event => { if (event.pointerType === 'mouse') { hovered = false; syncMotion(); } });
-  timeline.addEventListener('focusin', syncMotion);
-  timeline.addEventListener('focusout', () => requestAnimationFrame(syncMotion));
-  track.addEventListener('pointerdown', () => { touching = true; syncMotion(); }, {passive:true});
-  const release = () => { if (touching) { touching = false; hold(); } };
-  addEventListener('pointerup', release, {passive:true});
-  addEventListener('pointercancel', release, {passive:true});
-  track.addEventListener('wheel', hold, {passive:true});
-  document.addEventListener('visibilitychange', syncMotion);
-  motionPreference.addEventListener('change', () => { wanted = !motionPreference.matches; syncMotion(); });
-  new IntersectionObserver(entries => { inView = entries[0].isIntersecting; syncMotion(); }, {threshold:.1}).observe(track);
-  let timer;
-  track.addEventListener('scroll', () => { if (frame) return; clearTimeout(timer); timer = setTimeout(() => { destination = null; update(); }, 120); }, {passive:true});
-  // Mouse dragging complements the native touch pan, arrows and keyboard controls.
-  let drag;
-  track.addEventListener('pointerdown', event => {
-    if (event.pointerType !== 'mouse' || event.button !== 0 || event.target.closest('a,button')) return;
-    drag = {id:event.pointerId, x:event.clientX, left:track.scrollLeft, moved:false};
-    track.setPointerCapture(event.pointerId);
-  });
-  track.addEventListener('pointermove', event => {
-    if (!drag || drag.id !== event.pointerId) return;
-    const delta = event.clientX - drag.x;
-    if (!drag.moved && Math.abs(delta) < 6) return;
-    drag.moved = true;
-    destination = null;
-    track.classList.add('is-dragging');
-    track.scrollLeft = drag.left - delta;
-    event.preventDefault();
-  });
-  const endDrag = () => {
-    if (!drag) return;
-    const moved = drag.moved;
-    const id = drag.id;
-    drag = null;
-    track.classList.remove('is-dragging');
-    if (track.hasPointerCapture(id)) track.releasePointerCapture(id);
-    if (moved) go(Math.round(track.scrollLeft / step()));
+  const hold = () => {
+    holdUntil = performance.now() + 1800;
+    clearTimeout(resumeTimer);resumeTimer = setTimeout(syncMotion,1850);syncMotion();
   };
-  track.addEventListener('pointerup', endDrag);
-  track.addEventListener('pointercancel', endDrag);
-  track.addEventListener('lostpointercapture', endDrag);
-  new ResizeObserver(() => { destination = null; offset = track.scrollLeft % loopWidth(); update(); }).observe(track);
-  update();
+  const go = index => {
+    hold(); remainder = 0; belt.style.transform = '';
+    destination = Math.max(0,Math.min(index,records.length-1));
+    track.scrollTo({left:destination*stride,behavior:motionPreference.matches ? 'instant' : 'smooth'});
+  };
+  const current = () => destination ?? Math.round(offset()/stride) % records.length;
+  previous.addEventListener('click',() => go(current()-1));
+  next.addEventListener('click',() => go(current()+1));
+  years.forEach(button => button.addEventListener('click',() => go(records.findIndex(r=>r.dataset.startYear===button.dataset.timelineYear))));
+  track.addEventListener('keydown',event => {
+    if(event.target!==track || !['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+    event.preventDefault();go(event.key==='Home'?0:event.key==='End'?records.length-1:current()+(event.key==='ArrowRight'?1:-1));
+  });
+  motion.addEventListener('click',() => {wanted=!wanted;syncMotion();});
+  timeline.addEventListener('pointerenter',event => {if(event.pointerType==='mouse'){hovered=true;syncMotion();}});
+  timeline.addEventListener('pointerleave',event => {if(event.pointerType==='mouse'){hovered=false;syncMotion();}});
+  timeline.addEventListener('focusin',syncMotion);
+  timeline.addEventListener('focusout',() => requestAnimationFrame(syncMotion));
+  track.addEventListener('pointerdown',() => {touching=true;syncMotion();},{passive:true});
+  const release=()=>{if(touching){touching=false;hold();}};
+  addEventListener('pointerup',release,{passive:true});addEventListener('pointercancel',release,{passive:true});
+  track.addEventListener('wheel',hold,{passive:true});
+  document.addEventListener('visibilitychange',syncMotion);
+  motionPreference.addEventListener('change',() => {wanted=!motionPreference.matches;syncMotion();});
+  new IntersectionObserver(entries=>{inView=entries[0].isIntersecting;syncMotion();},{threshold:.1}).observe(track);
+  track.addEventListener('scroll',() => {
+    if(animation)return;
+    clearTimeout(scrollTimer);scrollTimer=setTimeout(()=>{destination=null;update();},120);
+  },{passive:true});
+  let drag;
+  track.addEventListener('pointerdown',event => {
+    if(event.pointerType!=='mouse'||event.button!==0||event.target.closest('a,button'))return;
+    drag={id:event.pointerId,x:event.clientX,left:track.scrollLeft,moved:false};track.setPointerCapture(event.pointerId);
+  });
+  track.addEventListener('pointermove',event => {
+    if(!drag||drag.id!==event.pointerId)return;
+    const delta=event.clientX-drag.x;if(!drag.moved&&Math.abs(delta)<6)return;
+    drag.moved=true;destination=null;remainder=0;belt.style.transform='';track.classList.add('is-dragging');
+    track.scrollLeft=drag.left-delta;event.preventDefault();
+  });
+  const endDrag=()=>{
+    if(!drag)return;const {moved,id}=drag;drag=null;track.classList.remove('is-dragging');
+    if(track.hasPointerCapture(id))track.releasePointerCapture(id);
+    if(moved)go(Math.round(track.scrollLeft/stride));
+  };
+  track.addEventListener('pointerup',endDrag);track.addEventListener('pointercancel',endDrag);track.addEventListener('lostpointercapture',endDrag);
+  // Geometry is measured only at resize/font readiness, never on an animation frame.
+  const measure=()=>{
+    stop();destination=null;
+    const first=records[0].getBoundingClientRect(),second=records[1]?.getBoundingClientRect();
+    recordWidth=first.width;viewportWidth=track.clientWidth;stride=second?second.left-first.left:recordWidth;loopWidth=stride*records.length;
+    syncMotion();
+  };
+  new ResizeObserver(measure).observe(track);document.fonts.ready.then(measure);measure();
 })();
 
 // Local decorative video: no download until motion is allowed or explicitly requested.
@@ -278,7 +290,7 @@ if (filters.length) filterProjects('all');
 
 
 // Native details remain usable without JavaScript; animation is interruption-safe.
-document.querySelectorAll('details.faq').forEach(details => {
+document.querySelectorAll('details.faq, details.career-role, .additional-capabilities details').forEach(details => {
   const summary = details.querySelector('summary');
   let animation;
   let expanded = details.open;
@@ -297,10 +309,11 @@ document.querySelectorAll('details.faq').forEach(details => {
     animation?.cancel();
     details.style.height = '';
     details.open = true;
-    const border = parseFloat(getComputedStyle(details).borderTopWidth) + parseFloat(getComputedStyle(details).borderBottomWidth);
-    const to = expanded ? details.getBoundingClientRect().height : summary.getBoundingClientRect().height + border;
+    const styles = getComputedStyle(details);
+    const chrome = ['borderTopWidth','borderBottomWidth','paddingTop','paddingBottom'].reduce((sum,key)=>sum+parseFloat(styles[key] || 0),0);
+    const to = expanded ? details.getBoundingClientRect().height : summary.getBoundingClientRect().height + chrome;
     details.style.overflow = 'hidden';
-    animation = details.animate({height:[`${from}px`,`${to}px`]}, {duration:expanded ? 280 : 200,easing:motionEase});
+    animation = details.animate({height:[`${from}px`,`${to}px`]}, {duration:expanded ? 260 : 200,easing:motionEase});
     animation.onfinish = settle;
   });
   motionPreference.addEventListener('change', () => { if (animation) settle(); });
