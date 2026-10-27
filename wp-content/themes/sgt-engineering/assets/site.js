@@ -241,50 +241,102 @@ if (filters.length) filterProjects('all');
   new ResizeObserver(measure).observe(track);document.fonts.ready.then(measure);measure();
 })();
 
-// Local decorative video: no download until motion is allowed or explicitly requested.
+// Three project films: keep a poster visible and decode the next scene before fading.
 (() => {
-  const video = document.querySelector('#hero-video');
-  const button = document.querySelector('.hero-motion');
-  if (!video || !button) return;
-  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  const hero = document.querySelector('.hero');
+  const scenes = [...document.querySelectorAll('[data-hero-scene]')];
+  const videos = scenes.map(scene => scene.querySelector('video'));
+  const button = hero?.querySelector('.hero-motion');
+  const selectors = [...document.querySelectorAll('[data-hero-select]')];
+  if (!hero || !scenes.length || !button) return;
   const connection = navigator.connection;
-  let wanted = !reduced.matches && !connection?.saveData;
-  let visible = true;
-  let failed = false;
-  video.muted = true;
-  button.hidden = false;
+  const failed = new Set();
+  let active = 0, wanted = !motionPreference.matches && !connection?.saveData;
+  let visible = true, request = 0, fadeTimer;
+  hero.querySelector('.hero-controls').hidden = false;
+  const canPlay = () => wanted && visible && !document.hidden;
   const reflect = () => {
-    const playing = !video.paused;
-    button.classList.toggle('is-playing', playing);
-    button.setAttribute('aria-label', `${playing ? 'Pause' : 'Play'} background video`);
+    const playing = !videos[active].paused;
+    button.hidden = failed.has(active);
+    button.classList.toggle('is-playing',playing);
+    button.setAttribute('aria-label',`${playing ? 'Pause' : 'Play'} background video`);
+    button.setAttribute('aria-controls',videos[active].id);
     button.querySelector('span').textContent = `${playing ? 'Pause' : 'Play'} video`;
   };
-  const sync = async () => {
-    if (!wanted || !visible || document.hidden || failed) { video.pause(); return; }
-    if (!video.getAttribute('src')) video.src = video.dataset.src;
-    try { await video.play(); } catch { /* Autoplay restrictions leave a working play control and poster. */ }
+  const load = index => {
+    const video = videos[index];
+    if (!video.getAttribute('src') && !failed.has(index)) { video.preload = 'auto'; video.src = video.dataset.src; }
+  };
+  const ready = index => new Promise(resolve => {
+    const video = videos[index];
+    if (failed.has(index)) { resolve(false); return; }
+    if (video.readyState >= 2) { resolve(true); return; }
+    let timer;
+    const done = () => {clearTimeout(timer);video.removeEventListener('loadeddata',done);video.removeEventListener('error',done);resolve(video.readyState>=2);};
+    video.addEventListener('loadeddata',done);video.addEventListener('error',done);
+    timer=setTimeout(done,8000);load(index);
+  });
+  const next = () => {
+    for(let step=1;step<scenes.length;step++){const index=(active+step)%scenes.length;if(!failed.has(index))return index;}
+    return active;
+  };
+  const activate = index => {
+    clearTimeout(fadeTimer);
+    scenes.forEach(scene=>scene.classList.remove('is-leaving'));
+    if(index!==active){scenes[active].classList.add('is-leaving');videos[active].pause();}
+    active=index;
+    scenes.forEach((scene,i)=>scene.classList.toggle('is-active',i===active));
+    selectors.forEach((selector,i)=>selector.setAttribute('aria-pressed',String(i===active)));
+    hero.querySelector('.hero-caption>span').textContent=scenes[active].dataset.visualLabel;
+    const link=hero.querySelector('.hero-caption a');link.href=scenes[active].dataset.projectUrl;
+    link.querySelector('span').textContent=`View the ${scenes[active].dataset.projectTitle} project`;
+    fadeTimer=setTimeout(()=>scenes.forEach(scene=>scene.classList.remove('is-leaving')),750);
     reflect();
   };
-  video.addEventListener('playing', () => { video.classList.add('is-ready'); reflect(); });
-  video.addEventListener('pause', reflect);
-  video.addEventListener('error', () => {
-    failed = true;
-    video.classList.remove('is-ready');
-    button.hidden = true;
+  const select = async (index,automatic=false) => {
+    const token=++request;
+    if(automatic&&!canPlay())return;
+    if(canPlay()) {
+      await ready(index);
+      if(token!==request || (automatic&&!canPlay()))return;
+      if(canPlay()&&!failed.has(index)) {
+        const video=videos[index];
+        if(index!==active || video.ended)video.currentTime=0;
+        try{await video.play();}catch{/* Poster and manual Play survive autoplay restrictions. */}
+        if(token!==request){if(index!==active||!canPlay())video.pause();return;}
+        if(!canPlay())video.pause();
+      }
+    }
+    if(automatic&&failed.has(index)){const available=next();if(available!==active)return select(available,true);}
+    activate(index);
+  };
+  const sync = () => {
+    if(!canPlay()){request++;videos.forEach(video=>video.pause());reflect();return;}
+    select(active);
+  };
+  videos.forEach((video,index)=>{
+    video.muted=true;
+    video.addEventListener('playing',()=>{video.classList.add('is-ready');if(index===active)reflect();});
+    video.addEventListener('pause',()=>{if(index===active)reflect();});
+    video.addEventListener('error',()=>{failed.add(index);video.classList.remove('is-ready');if(index===active)reflect();});
+    video.addEventListener('ended',()=>{
+      if(index!==active||!canPlay())return;
+      const following=next();select(following,true);
+    });
+    video.addEventListener('timeupdate',()=>{
+      if(index===active&&canPlay()&&!connection?.saveData&&video.duration-video.currentTime<2)load(next());
+    });
   });
-  button.addEventListener('click', () => { wanted = video.paused; sync(); });
-  const preferenceChanged = () => {
-    wanted = !reduced.matches && !connection?.saveData;
-    if (!wanted) video.classList.remove('is-ready');
+  selectors.forEach((selector,index)=>selector.addEventListener('click',()=>select(index)));
+  button.addEventListener('click',()=>{wanted=videos[active].paused;sync();});
+  const preferenceChanged=()=>{
+    wanted=!motionPreference.matches&&!connection?.saveData;
+    if(!wanted)videos.forEach(video=>video.classList.remove('is-ready'));
     sync();
   };
-  reduced.addEventListener('change', preferenceChanged);
-  connection?.addEventListener('change', preferenceChanged);
-  document.addEventListener('visibilitychange', sync);
-  new IntersectionObserver(entries => {
-    visible = entries[0].isIntersecting;
-    sync();
-  }, {threshold: 0.05}).observe(video.closest('.hero'));
+  motionPreference.addEventListener('change',preferenceChanged);connection?.addEventListener('change',preferenceChanged);
+  document.addEventListener('visibilitychange',sync);
+  new IntersectionObserver(entries=>{visible=entries[0].isIntersecting;sync();},{threshold:.05}).observe(hero);
   sync();
 })();
 

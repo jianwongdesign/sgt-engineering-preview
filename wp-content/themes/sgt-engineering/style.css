@@ -2,7 +2,7 @@
 Theme Name: SGT Engineering
 Author: SGT x Adcendes
 Description: An architectural, project-led WordPress theme for SGT Engineering Consultancy.
-Version: 0.6.2
+Version: 0.7.0
 Requires at least: 6.6
 Requires PHP: 8.1
 Text Domain: sgt-engineering
@@ -740,3 +740,28 @@ body:has(.cookie-banner:not([hidden])) .whatsapp-launcher:not(.is-positioned) {v
  .career-role>summary {gap:12px}
 }
 @media print {.career-role .career-body {display:block!important}.career-toggle-label,.career-toggle-icon {display:none}}
+
+/* Three project films: crossfade decoded frames; only the selected film plays. */
+.hero-scene {position:absolute;inset:0;opacity:0;transition:opacity 700ms ease;pointer-events:none}
+.hero-scene.is-active,.hero-scene.is-leaving {opacity:1}
+.hero-scene.is-active {z-index:2}
+.hero-scene.is-leaving {z-index:1}
+.hero-controls {display:flex;align-items:center;gap:16px;flex-shrink:0}
+.hero-controls[hidden] {display:none}
+.hero-scenes {display:flex;gap:5px}
+.hero-scenes button {width:44px;height:44px;border:1px solid rgba(255,255,255,.6);border-radius:var(--radius-control);background:rgba(8,22,34,.65);color:#fff;font-size:12px;font-weight:600;transition:background-color 160ms ease,color 160ms ease}
+.hero-scenes button[aria-pressed=true] {background:#fff;color:var(--navy);border-color:#fff}
+.hero-scenes button:hover {background:var(--navy);color:#fff}
+.hero-scenes button:focus-visible {outline:3px solid #fff;outline-offset:3px}
+.hero-caption {min-width:0;min-height:62px}
+.hero-caption a {min-height:32px}
+.hero-scene[data-hero-scene=changi] img,.hero-scene[data-hero-scene=changi] video {object-position:50% 50%}
+.hero-scene[data-hero-scene=tuas] img,.hero-scene[data-hero-scene=tuas] video {object-position:55% 50%}
+@media(max-width:760px) {
+ .hero-footer {flex-wrap:wrap;align-items:center;gap:12px}
+ .hero-controls {gap:10px}
+ .hero-caption {flex-basis:100%;min-height:0;padding-top:8px}
+ .hero-caption>span {display:inline}
+ .hero-caption a {min-height:32px}
+}
+@media print {.hero-controls {display:none!important}.hero-scene {display:none}.hero-scene.is-active {display:block;opacity:1}}
