@@ -241,7 +241,7 @@ if (filters.length) filterProjects('all');
   new ResizeObserver(measure).observe(track);document.fonts.ready.then(measure);measure();
 })();
 
-// Three project films: keep a poster visible and decode the next scene before fading.
+// Project films rotate on a clock, so buffering cannot hold the hero on one scene.
 (() => {
   const hero = document.querySelector('.hero');
   const scenes = [...document.querySelectorAll('[data-hero-scene]')];
@@ -252,16 +252,18 @@ if (filters.length) filterProjects('all');
   const connection = navigator.connection;
   const failed = new Set();
   let active = 0, wanted = !motionPreference.matches && !connection?.saveData;
-  let visible = true, request = 0, fadeTimer;
+  let visible = true, request = 0, fadeTimer, rotationTimer;
+  const rotationDelay = 6500;
   hero.querySelector('.hero-controls').hidden = false;
   const canPlay = () => wanted && visible && !document.hidden;
   const reflect = () => {
-    const playing = !videos[active].paused;
-    button.hidden = failed.has(active);
+    const playing = canPlay();
+    button.hidden = false;
     button.classList.toggle('is-playing',playing);
     button.setAttribute('aria-label',`${playing ? 'Pause' : 'Play'} background video`);
     button.setAttribute('aria-controls',videos[active].id);
     button.querySelector('span').textContent = `${playing ? 'Pause' : 'Play'} video`;
+    button.title = playing ? 'Pause video and automatic rotation' : 'Play video and automatic rotation';
   };
   const load = index => {
     const video = videos[index];
@@ -272,13 +274,17 @@ if (filters.length) filterProjects('all');
     if (failed.has(index)) { resolve(false); return; }
     if (video.readyState >= 2) { resolve(true); return; }
     let timer;
-    const done = () => {clearTimeout(timer);video.removeEventListener('loadeddata',done);video.removeEventListener('error',done);resolve(video.readyState>=2);};
-    video.addEventListener('loadeddata',done);video.addEventListener('error',done);
+    const done = () => {clearTimeout(timer);video.removeEventListener('canplay',done);video.removeEventListener('error',done);resolve(video.readyState>=2);};
+    video.addEventListener('canplay',done);video.addEventListener('error',done);
     timer=setTimeout(done,8000);load(index);
   });
   const next = () => {
     for(let step=1;step<scenes.length;step++){const index=(active+step)%scenes.length;if(!failed.has(index))return index;}
-    return active;
+    return (active+1)%scenes.length;
+  };
+  const schedule = () => {
+    clearTimeout(rotationTimer);
+    if(canPlay())rotationTimer=setTimeout(()=>select(next(),true),rotationDelay);
   };
   const activate = index => {
     clearTimeout(fadeTimer);
@@ -292,27 +298,37 @@ if (filters.length) filterProjects('all');
     link.querySelector('span').textContent=`View the ${scenes[active].dataset.projectTitle} project`;
     fadeTimer=setTimeout(()=>scenes.forEach(scene=>scene.classList.remove('is-leaving')),750);
     reflect();
+    schedule();
   };
-  const select = async (index,automatic=false) => {
-    const token=++request;
+  const playActive = async (token) => {
+    const index=active;
+    await ready(index);
+    if(token!==request || !canPlay() || failed.has(index))return;
+    const video=videos[index];
+    try{await video.play();}catch{/* Keep rotating posters if this browser blocks autoplay. */}
+    if(index!==active || !canPlay())video.pause();
+  };
+  const select = (index,automatic=false) => {
     if(automatic&&!canPlay())return;
-    if(canPlay()) {
-      await ready(index);
-      if(token!==request || (automatic&&!canPlay()))return;
-      if(canPlay()&&!failed.has(index)) {
-        const video=videos[index];
-        if(index!==active || video.ended)video.currentTime=0;
-        try{await video.play();}catch{/* Poster and manual Play survive autoplay restrictions. */}
-        if(token!==request){if(index!==active||!canPlay())video.pause();return;}
-        if(!canPlay())video.pause();
-      }
+    const token=++request;
+    // Respond immediately with the matching poster; decoded video fades in when ready.
+    if(index!==active || videos[index].ended){
+      videos[index].classList.remove('is-ready');
+      if(videos[index].readyState)videos[index].currentTime=0;
     }
-    if(automatic&&failed.has(index)){const available=next();if(available!==active)return select(available,true);}
     activate(index);
+    if(canPlay()){
+      playActive(token);
+      if(!connection?.saveData)load(next());
+    }
   };
   const sync = () => {
-    if(!canPlay()){request++;videos.forEach(video=>video.pause());reflect();return;}
-    select(active);
+    request++;
+    clearTimeout(rotationTimer);
+    if(!canPlay()){videos.forEach(video=>video.pause());reflect();return;}
+    if(videos[active].ended)videos[active].currentTime=0;
+    reflect();schedule();playActive(request);
+    if(!connection?.saveData)load(next());
   };
   videos.forEach((video,index)=>{
     video.muted=true;
@@ -328,7 +344,29 @@ if (filters.length) filterProjects('all');
     });
   });
   selectors.forEach((selector,index)=>selector.addEventListener('click',()=>select(index)));
-  button.addEventListener('click',()=>{wanted=videos[active].paused;sync();});
+  button.addEventListener('click',()=>{wanted=!wanted;sync();});
+  const step = direction => select((active+direction+scenes.length)%scenes.length);
+  hero.querySelector('[data-hero-prev]').addEventListener('click',()=>step(-1));
+  hero.querySelector('[data-hero-next]').addEventListener('click',()=>step(1));
+  hero.querySelector('.hero-scenes').addEventListener('keydown',event=>{
+    if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+    event.preventDefault();
+    if(event.key==='Home')select(0);
+    else if(event.key==='End')select(scenes.length-1);
+    else step(event.key==='ArrowLeft'?-1:1);
+    selectors[active].focus();
+  });
+  let gesture;
+  hero.addEventListener('pointerdown',event=>{
+    gesture=event.isPrimary && event.pointerType==='touch' && !event.target.closest('a,button')
+      ? {x:event.clientX,y:event.clientY,id:event.pointerId}:null;
+  });
+  hero.addEventListener('pointerup',event=>{
+    if(!gesture || gesture.id!==event.pointerId)return;
+    const dx=event.clientX-gesture.x,dy=event.clientY-gesture.y;gesture=null;
+    if(Math.abs(dx)>45 && Math.abs(dx)>Math.abs(dy)*1.3)step(dx<0?1:-1);
+  });
+  hero.addEventListener('pointercancel',()=>{gesture=null;});
   const preferenceChanged=()=>{
     wanted=!motionPreference.matches&&!connection?.saveData;
     if(!wanted)videos.forEach(video=>video.classList.remove('is-ready'));
