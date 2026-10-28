@@ -2,7 +2,7 @@
 Theme Name: SGT Engineering
 Author: SGT x Adcendes
 Description: An architectural, project-led WordPress theme for SGT Engineering Consultancy.
-Version: 0.7.2
+Version: 0.7.3
 Requires at least: 6.6
 Requires PHP: 8.1
 Text Domain: sgt-engineering
@@ -776,3 +776,7 @@ body:has(.cookie-banner:not([hidden])) .whatsapp-launcher:not(.is-positioned) {v
  .hero-scenes {gap:3px}
  .hero-motion {width:44px;height:44px;min-width:44px;padding:0;justify-content:center}
 }
+
+/* A fine recessed edge lifts the white hero wording off the project footage. */
+.hero h1 {text-shadow:0 1px 1px rgba(8,22,34,.65),0 3px 12px rgba(8,22,34,.28)}
+.hero-content>p {text-shadow:0 1px 3px rgba(8,22,34,.45)}
