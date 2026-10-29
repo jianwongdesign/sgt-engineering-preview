@@ -2,7 +2,7 @@
 Theme Name: SGT Engineering
 Author: SGT x Adcendes
 Description: An architectural, project-led WordPress theme for SGT Engineering Consultancy.
-Version: 0.7.3
+Version: 0.7.4
 Requires at least: 6.6
 Requires PHP: 8.1
 Text Domain: sgt-engineering
@@ -572,7 +572,7 @@ body:has(.cookie-banner:not([hidden])) .whatsapp-launcher:not(.is-positioned) {v
 .additional-capabilities>h2 {font-size:30px;margin-bottom:20px}
 .additional-capabilities details {border-top:1px solid var(--line);padding:20px 0}
 .additional-capabilities summary {min-height:44px;cursor:pointer;font-size:18px;font-weight:600;line-height:1.5;padding:4px 0}
-.additional-capabilities details p {max-width:72ch;margin:14px 0 0;color:var(--muted)}
+.additional-capabilities details p {max-width:none;margin:14px 0 0;color:var(--muted)}
 .project-photo>img.engineering-drawing,.single-hero>img.engineering-drawing {object-fit:contain;background:var(--white);padding:18px}
 @media(max-width:760px) {.whatsapp-launcher {right:16px;bottom:calc(var(--whatsapp-bottom,16px) + env(safe-area-inset-bottom));min-height:52px;padding:13px 15px;font-size:12px}.additional-capabilities {margin-top:34px}.additional-capabilities>h2 {font-size:27px}.additional-capabilities summary {font-size:17px}}
 @media(prefers-reduced-motion:reduce) {.whatsapp-launcher {transition:none}.whatsapp-launcher:hover {transform:none}}
